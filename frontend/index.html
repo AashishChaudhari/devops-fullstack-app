@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DevOps Demo App</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 640px; margin: 40px auto; padding: 0 16px; }
+    button { padding: 8px 16px; margin-right: 8px; cursor: pointer; }
+    pre { background: #f4f4f4; padding: 12px; border-radius: 6px; white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <h1>DevOps Demo App</h1>
+  <p>Frontend served by Nginx. Backend is Flask, using Redis and PostgreSQL.</p>
+
+  <button onclick="callApi('GET', '/api/health')">Check health</button>
+  <button onclick="callApi('POST', '/api/visit')">Record a visit</button>
+
+  <pre id="output">Click a button.</pre>
+
+  <script>
+    async function callApi(method, path) {
+      const out = document.getElementById('output');
+      out.textContent = 'Loading...';
+      try {
+        const res = await fetch(path, { method });
+        const data = await res.json();
+        out.textContent = `HTTP ${res.status}\n` + JSON.stringify(data, null, 2);
+      } catch (err) {
+        out.textContent = 'Request failed: ' + err;
+      }
+    }
+  </script>
+</body>
+</html>

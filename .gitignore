@@ -1,3 +1,4 @@
+# Secrets: never commit
 .env
 
 # Python clutter
@@ -5,3 +6,4 @@ __pycache__/
 *.pyc
 venv/
 .venv/
+.pytest_cache/

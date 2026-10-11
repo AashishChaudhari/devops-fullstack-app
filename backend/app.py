@@ -7,23 +7,34 @@ import redis
 from flask import Flask, jsonify
 from werkzeug.exceptions import HTTPException
 
-# Logs go to stdout. Docker captures stdout, and Loki will collect it later.
+# Logs go to stdout. Docker captures stdout, and Loki collects it.
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s level=%(levelname)s logger=%(name)s msg=%(message)s",
 )
 log = logging.getLogger("backend")
 
-# All configuration comes from environment variables, never hardcoded.
+
+def read_secret(name, default=""):
+    """Read a secret from the file in NAME_FILE (Docker/Swarm secrets),
+    or fall back to the NAME environment variable (Docker Compose)."""
+    path = os.getenv(f"{name}_FILE")
+    if path:
+        with open(path) as secret_file:
+            return secret_file.read().strip()
+    return os.getenv(name, default)
+
+
+# All configuration comes from environment variables or secret files, never hardcoded.
 APP_VERSION = os.getenv("APP_VERSION", "dev")
 DB_HOST = os.getenv("DB_HOST", "localhost")
 DB_PORT = int(os.getenv("DB_PORT", "5432"))
 DB_NAME = os.getenv("DB_NAME", "appdb")
 DB_USER = os.getenv("DB_USER", "appuser")
-DB_PASSWORD = os.getenv("DB_PASSWORD", "")
+DB_PASSWORD = read_secret("DB_PASSWORD")
 REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
 REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
-REDIS_PASSWORD = os.getenv("REDIS_PASSWORD") or None
+REDIS_PASSWORD = read_secret("REDIS_PASSWORD") or None
 
 app = Flask(__name__)
 
@@ -49,8 +60,15 @@ def get_redis():
     )
 
 
+@app.get("/api/live")
+def live():
+    # Liveness: the process is running and can serve HTTP. No dependency checks.
+    return jsonify({"status": "alive", "version": APP_VERSION})
+
+
 @app.get("/api/health")
 def health():
+    # Readiness: can the app actually do its job? Checks both dependencies.
     result = {"version": APP_VERSION, "container": socket.gethostname()}
     healthy = True
 

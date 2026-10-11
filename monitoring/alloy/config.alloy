@@ -13,6 +13,7 @@ discovery.relabel "containers" {
     target_label  = "container"
   }
 
+  // Docker Compose containers
   rule {
     source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
     target_label  = "service"
@@ -20,6 +21,19 @@ discovery.relabel "containers" {
 
   rule {
     source_labels = ["__meta_docker_container_label_com_docker_compose_project"]
+    target_label  = "project"
+  }
+
+  // Docker Swarm containers: "devops-app_backend" becomes service="backend"
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_swarm_service_name"]
+    regex         = "[^_]+_(.+)"
+    target_label  = "service"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_stack_namespace"]
+    regex         = "(.+)"
     target_label  = "project"
   }
 }

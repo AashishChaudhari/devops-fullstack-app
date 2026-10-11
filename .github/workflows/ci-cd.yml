@@ -38,9 +38,11 @@ jobs:
           docker build -t devops-frontend:ci ./frontend
 
   deploy:
-    name: Deploy to server
+    name: Deploy to Docker Swarm
     needs: test
     runs-on: self-hosted
+    env:
+      STACK: devops-app
     defaults:
       run:
         working-directory: /opt/devops-fullstack-app
@@ -51,29 +53,47 @@ jobs:
           git reset --hard "$GITHUB_SHA"
           git log --oneline -1
 
-      - name: Build and start containers
+      - name: Build images
+        run: |
+          APP_VERSION="${GITHUB_SHA::7}"
+          docker build -t "devops-backend:$APP_VERSION" ./backend
+          docker build -t "devops-frontend:$APP_VERSION" ./frontend
+
+      - name: Deploy stack with rolling update
         run: |
           export APP_VERSION="${GITHUB_SHA::7}"
-          echo "Deploying version $APP_VERSION"
-          docker compose up -d --build --remove-orphans
+          docker stack deploy --compose-file stack.yml --resolve-image never --detach=false "$STACK"
+          docker stack services "$STACK"
 
       - name: Smoke test the live application
         run: |
           expected="${GITHUB_SHA::7}"
-          for attempt in $(seq 1 10); do
+
+          all_tasks_on_new_version() {
+            for svc in "${STACK}_backend" "${STACK}_frontend"; do
+              if docker service ps "$svc" --filter desired-state=running --format '{{.Image}}' | grep -vq ":$expected$"; then
+                return 1
+              fi
+            done
+            return 0
+          }
+
+          for attempt in $(seq 1 20); do
             response=$(curl -sS http://devops.local/api/health || true)
             echo "Attempt $attempt: $response"
-            if echo "$response" | grep -q "\"version\":\"$expected\"" \
+            if all_tasks_on_new_version \
+              && echo "$response" | grep -q "\"version\":\"$expected\"" \
               && echo "$response" | grep -q '"postgres":"ok"' \
               && echo "$response" | grep -q '"redis":"ok"'; then
-              echo "Version $expected is live and healthy"
+              echo "All replicas run $expected and the app is healthy"
               exit 0
             fi
             sleep 3
           done
-          echo "Smoke test failed: version $expected is not live and healthy"
-          docker compose ps
-          docker compose logs --tail 30 backend
+
+          echo "Smoke test failed for version $expected"
+          docker stack ps "$STACK" --no-trunc | head -n 20
+          docker service logs --tail 30 "${STACK}_backend"
           exit 1
 
       - name: Remove dangling images
